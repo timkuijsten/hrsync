@@ -1,0 +1,23 @@
+--- pipe.c.orig	Mon Apr 23 21:49:48 2018
++++ pipe.c	Mon Apr 23 21:50:33 2018
+@@ -32,6 +32,9 @@
+ extern const char **remote_options;
+ extern struct chmod_mode_struct *chmod_modes;
+ 
++extern uid_t uiddrop;
++extern gid_t giddrop;
++
+ /**
+  * Create a child connected to us via its stdin/stdout.
+  *
+@@ -66,6 +69,10 @@
+ 	}
+ 
+ 	if (pid == 0) {
++		if (uiddrop) /* drop privileges */
++			if (dropsuperuser())
++				err(1, "dropsuperuser %d:%d", uiddrop, giddrop);
++
+ 		if (dup2(to_child_pipe[0], STDIN_FILENO) < 0 ||
+ 		    close(to_child_pipe[1]) < 0 ||
+ 		    close(from_child_pipe[0]) < 0 ||

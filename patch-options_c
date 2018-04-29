@@ -1,0 +1,157 @@
+--- options.c.orig	Mon Jan 15 04:55:07 2018
++++ options.c	Sun Apr 29 14:07:00 2018
+@@ -128,6 +128,12 @@
+ char *skip_compress = NULL;
+ item_list dparam_list = EMPTY_ITEM_LIST;
+ 
++/* change root and user options */
++char *newroot;
++char *dropsuper;
++uid_t uiddrop = 0;
++gid_t giddrop = 0;
++
+ /** Network address family. **/
+ int default_af_hint
+ #ifdef INET6
+@@ -806,6 +812,8 @@
+   rprintf(F,"     --checksum-seed=NUM     set block/file checksum seed (advanced)\n");
+   rprintf(F," -4, --ipv4                  prefer IPv4\n");
+   rprintf(F," -6, --ipv6                  prefer IPv6\n");
++  rprintf(F,"     --chroot                change root\n");
++  rprintf(F,"     --dropsuper             drop to an unprivileged user before syncing\n");
+   rprintf(F,"     --version               print version number\n");
+   rprintf(F,"(-h) --help                  show this help (-h is --help only if used alone)\n");
+ 
+@@ -821,12 +829,14 @@
+       OPT_READ_BATCH, OPT_WRITE_BATCH, OPT_ONLY_WRITE_BATCH, OPT_MAX_SIZE,
+       OPT_NO_D, OPT_APPEND, OPT_NO_ICONV, OPT_INFO, OPT_DEBUG,
+       OPT_USERMAP, OPT_GROUPMAP, OPT_CHOWN, OPT_BWLIMIT,
+-      OPT_SERVER, OPT_REFUSED_BASE = 9000};
++      OPT_SERVER, OPT_CHROOT, OPT_DROPSUPER, OPT_REFUSED_BASE = 9000};
+ 
+ static struct poptOption long_options[] = {
+   /* longName, shortName, argInfo, argPtr, value, descrip, argDesc */
+   {"help",             0,  POPT_ARG_NONE,   0, OPT_HELP, 0, 0 },
+   {"version",          0,  POPT_ARG_NONE,   0, OPT_VERSION, 0, 0},
++  {"chroot",           0,  POPT_ARG_STRING, 0, OPT_CHROOT, 0, 0 },
++  {"dropsuper",        0,  POPT_ARG_STRING, 0, OPT_DROPSUPER, 0, 0 },
+   {"verbose",         'v', POPT_ARG_NONE,   0, 'v', 0, 0 },
+   {"no-verbose",       0,  POPT_ARG_VAL,    &verbose, 0, 0, 0 },
+   {"no-v",             0,  POPT_ARG_VAL,    &verbose, 0, 0, 0 },
+@@ -1308,9 +1318,10 @@
+  **/
+ int parse_arguments(int *argc_p, const char ***argv_p)
+ {
++	struct passwd *pwd;
+ 	static poptContext pc;
+ 	char *ref = lp_refuse_options(module_id);
+-	const char *arg, **argv = *argv_p;
++	const char *arg, **argv = *argv_p, *errstr;
+ 	int argc = *argc_p;
+ 	int opt;
+ 	int orig_protect_args = protect_args;
+@@ -1318,6 +1329,9 @@
+ 	if (ref && *ref)
+ 		set_refuse_options(ref);
+ 	if (am_daemon) {
++		warnx("%s: am_daemon", __func__);
++		abort();
++
+ 		set_refuse_options("log-file*");
+ #ifdef ICONV_OPTION
+ 		if (!*lp_charset(module_id))
+@@ -1352,6 +1366,52 @@
+ 			print_rsync_version(FINFO);
+ 			exit_cleanup(0);
+ 
++		case OPT_CHROOT:
++			if (geteuid() != 0)
++				errx(1, "--chroot requires rsync to be started "
++					"as the superuser");
++
++			newroot = strdup(poptGetOptArg(pc));
++			break;
++
++		case OPT_DROPSUPER:
++			if (geteuid() != 0)
++				errx(1, "--dropsuper requires rsync to be "
++					"started as the superuser");
++
++			/*
++			 * Resolve user and group ids (precedence of names
++			 * over ids is based on chown(1) and POSIX).
++			 */
++
++			dropsuper = strdup(poptGetOptArg(pc));
++
++			if ((pwd = getpwnam(dropsuper)) == NULL) {
++				/* Maybe it's a uid. */
++				uiddrop = strtonum(dropsuper, INT_MIN, INT_MAX,
++					&errstr);
++				if (errstr != NULL)
++					errx(1, "could not determine user id of"
++						" user \"%s\"", dropsuper);
++
++				pwd = getpwuid(uiddrop);
++				if (pwd == NULL) {
++					/*
++					 * uid is not set in passwd, but thats
++					 * ok. Use the same id for the group.
++					 */
++					giddrop = uiddrop;
++				} else {
++					/* Use the configured primary group. */
++					uiddrop = pwd->pw_uid;
++					giddrop = pwd->pw_gid;
++				}
++			} else {
++				uiddrop = pwd->pw_uid;
++				giddrop = pwd->pw_gid;
++			}
++			break;
++
+ 		case OPT_SERVER:
+ 			if (!am_server) {
+ 				/* Disable popt aliases on the server side and
+@@ -1375,6 +1435,8 @@
+ 			break;
+ 
+ 		case OPT_DAEMON:
++			errx(1, "--daemon not supported");
++
+ 			if (am_daemon) {
+ 				strlcpy(err_buf,
+ 					"Attempt to hack rsync thwarted!\n",
+@@ -1592,16 +1654,22 @@
+ 			break;
+ 
+ 		case OPT_WRITE_BATCH:
++			errx(1, "--write-batch not supported");
++
+ 			/* batch_name is already set */
+ 			write_batch = 1;
+ 			break;
+ 
+ 		case OPT_ONLY_WRITE_BATCH:
++			errx(1, "--write-batch not supported");
++
+ 			/* batch_name is already set */
+ 			write_batch = -1;
+ 			break;
+ 
+ 		case OPT_READ_BATCH:
++			errx(1, "--read-batch not supported");
++
+ 			/* batch_name is already set */
+ 			read_batch = 1;
+ 			break;
+@@ -2343,6 +2411,9 @@
+ 				return 0;
+ 			}
+ 		} else {
++			warnx("%s: files-from can only be used with stdin", __func__);
++			abort();
++
+ 			if (sanitize_paths)
+ 				files_from = sanitize_path(NULL, files_from, NULL, 0, SP_DEFAULT);
+ 			if (daemon_filter_list.head) {

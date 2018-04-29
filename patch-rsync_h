@@ -1,0 +1,28 @@
+--- rsync.h.orig	Mon Jan 15 19:58:31 2018
++++ rsync.h	Sun Apr 29 18:58:23 2018
+@@ -122,8 +122,8 @@
+  * unlikely to begin by sending a byte between MIN_PROTOCL_VERSION and
+  * MAX_PROTOCOL_VERSION. */
+ 
+-#define MIN_PROTOCOL_VERSION 20
+-#define OLD_PROTOCOL_VERSION 25
++#define MIN_PROTOCOL_VERSION 29
++#define OLD_PROTOCOL_VERSION 30
+ #define MAX_PROTOCOL_VERSION 40
+ 
+ #define MIN_FILECNT_LOOKAHEAD 1000
+@@ -368,6 +368,7 @@
+ #include <grp.h>
+ #endif
+ #include <errno.h>
++#include <err.h>
+ 
+ #ifdef HAVE_UTIME_H
+ #include <utime.h>
+@@ -1303,3 +1304,6 @@
+ #ifdef MAINTAINER_MODE
+ const char *get_panic_action(void);
+ #endif
++
++int do_chroot(const char *);
++int dropsuperuser(void);

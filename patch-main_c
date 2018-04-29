@@ -1,0 +1,269 @@
+--- main.c.orig	Mon Jan 15 04:55:07 2018
++++ main.c	Sun Apr 29 17:11:10 2018
+@@ -128,6 +128,17 @@
+ 
+ static void show_malloc_stats(void);
+ 
++/* change root and user options */
++extern char *newroot;
++extern uid_t uiddrop;
++extern gid_t giddrop;
++
++/* support pledge */
++extern int preserve_devices;
++extern int preserve_specials;
++extern int numeric_ids;
++static char weakenpromise[1024], *promise;
++
+ /* Works like waitpid(), but if we already harvested the child pid in our
+  * remember_children(), we succeed instead of returning an error. */
+ pid_t wait_process(pid_t pid, int *status_ptr, int flags)
+@@ -521,6 +532,9 @@
+ 	}
+ 
+ 	if (read_batch) {
++		warnx("%s: read_batch", __func__);
++		abort();
++
+ 		int from_gen_pipe[2];
+ 		set_allow_inc_recurse();
+ 		if (fd_pair(from_gen_pipe) < 0) {
+@@ -535,6 +549,9 @@
+ 		setup_iconv();
+ #endif
+ 	} else if (local_server) {
++		warnx("%s: local_server", __func__);
++		abort();
++
+ 		/* If the user didn't request --[no-]whole-file, force
+ 		 * it on, but only if we're not batch processing. */
+ 		if (whole_file < 0 && !write_batch)
+@@ -546,6 +563,55 @@
+ #endif
+ 	} else {
+ 		pid = piped_child(args, f_in_p, f_out_p);
++
++		/* chroot and change user and group ids */
++		if (newroot)
++			if (do_chroot(newroot) == -1)
++				err(1, "do_chroot %s", newroot);
++
++		if (uiddrop)
++			if (dropsuperuser())
++				err(1, "dropsuperuser %d:%d", uiddrop, giddrop);
++
++		if (am_sender) {
++			/*
++			 * Pledge client-sender
++			 */
++			if (numeric_ids) {
++				if (pledge("stdio proc rpath", NULL) == -1)
++					err(1, "pledge");
++			} else {
++				if (pledge("stdio proc rpath getpw", NULL) == -1)
++					err(1, "pledge");
++			}
++		} else {
++			/* prepare pledge client-receiver */
++			if (preserve_specials) {
++				/* Needs dpath to create fifos and unix to create sockets. */
++				if (strlcat(weakenpromise, " dpath unix",
++				    sizeof(weakenpromise)) >= sizeof(weakenpromise))
++					errx(1, "not enough room to pledge");
++			} else if (preserve_devices) {
++				if (strlcat(weakenpromise, " dpath",
++				    sizeof(weakenpromise)) >= sizeof(weakenpromise))
++					errx(1, "not enough room to pledge");
++			}
++			if (!numeric_ids)
++				if (strlcat(weakenpromise, " getpw",
++				    sizeof(weakenpromise)) >= sizeof(weakenpromise))
++					errx(1, "not enough room to pledge");
++
++			/*
++			 * Pledge client-receiver
++			 */
++			asprintf(&promise, "%s%s", "stdio proc fattr rpath cpath wpath",
++				weakenpromise);
++			if (pledge(promise, NULL) == -1)
++				err(1, "pledge");
++			free(promise);
++			promise = NULL;
++		}
++
+ #ifdef ICONV_CONST
+ 		setup_iconv();
+ #endif
+@@ -891,6 +957,14 @@
+ 	}
+ 
+ 	if (pid == 0) {
++		/* drop proc */
++		asprintf(&promise, "%s%s", "stdio fattr rpath cpath wpath",
++			weakenpromise);
++		if (pledge(promise, NULL) == -1)
++			err(1, "pledge");
++		free(promise);
++		promise = NULL;
++
+ 		am_receiver = 1;
+ 		send_msgs_to_gen = am_server;
+ 
+@@ -942,6 +1016,14 @@
+ 			msleep(20);
+ 	}
+ 
++	/* drop wpath */
++	asprintf(&promise, "%s%s", "stdio proc fattr rpath cpath",
++		weakenpromise);
++	if (pledge(promise, NULL) == -1)
++		err(1, "pledge");
++	free(promise);
++	promise = NULL;
++
+ 	am_generator = 1;
+ 	flist_receiving_enabled = True;
+ 
+@@ -1331,6 +1413,9 @@
+ 			}
+ 		}
+ 	} else {  /* read_batch */
++		warnx("%s: read_batch", __func__);
++		abort();
++
+ 		local_server = 1;
+ 		if (check_for_hostspec(argv[argc-1], &shell_machine, &rsync_port)) {
+ 			rprintf(FERROR, "remote destination is not allowed with --read-batch\n");
+@@ -1384,16 +1469,26 @@
+ 		}
+ 	}
+ 
+-	if (daemon_over_rsh < 0)
++	if (daemon_over_rsh < 0) {
++		warnx("%s: daemon_over_rsh", __func__);
++		abort();
++
+ 		return start_socket_client(shell_machine, remote_argc, remote_argv, argc, argv);
++	}
+ 
+ 	if (password_file && !daemon_over_rsh) {
++		warnx("%s: password_file", __func__);
++		abort();
++
+ 		rprintf(FERROR, "The --password-file option may only be "
+ 				"used when accessing an rsync daemon.\n");
+ 		exit_cleanup(RERR_SYNTAX);
+ 	}
+ 
+ 	if (connect_timeout) {
++		warnx("%s: connect_timeout", __func__);
++		abort();
++
+ 		rprintf(FERROR, "The --contimeout option may only be "
+ 				"used when connecting to an rsync daemon.\n");
+ 		exit_cleanup(RERR_SYNTAX);
+@@ -1420,6 +1515,9 @@
+ 	/* if we're running an rsync server on the remote host over a
+ 	 * remote shell command, we need to do the RSYNCD protocol first */
+ 	if (daemon_over_rsh) {
++		warnx("%s: daemon_over_rsh", __func__);
++		abort();
++
+ 		int tmpret;
+ 		tmpret = start_inband_exchange(f_in, f_out, shell_user, remote_argc, remote_argv);
+ 		if (tmpret < 0)
+@@ -1578,6 +1676,25 @@
+ 		exit_cleanup(RERR_SYNTAX);
+ 	}
+ 
++	if (uiddrop) {
++		/*
++		 * Temp drop for now, drop irrevocably after chroot/pledge but
++		 * before we do networking since we can't chroot before forking
++		 * ssh.
++		 */
++
++		if (setgroups(1, &giddrop) == -1)
++			err(1, "setgroups %d", giddrop);
++		if (setegid(giddrop) == -1)
++			err(1, "setegid %d", giddrop);
++		if (seteuid(uiddrop) == -1)
++			err(1, "seteuid %d", uiddrop);
++
++		our_uid = MY_UID();
++		our_gid = MY_GID();
++		am_root = our_uid == 0;
++	}
++
+ 	SIGACTMASK(SIGINT, sig_int);
+ 	SIGACTMASK(SIGHUP, sig_int);
+ 	SIGACTMASK(SIGTERM, sig_int);
+@@ -1598,6 +1715,11 @@
+ 	 * that implement getcwd that way "pwd" can't be found after chroot. */
+ 	change_dir(NULL, CD_NORMAL);
+ 
++	if (write_batch || read_batch || am_daemon) {
++		warnx("%s: write_batch || read_batch || am_daemon", __func__);
++		abort();
++	}
++
+ 	if ((write_batch || read_batch) && !am_server) {
+ 		if (write_batch)
+ 			write_batch_shell_file(orig_argc, orig_argv, argc);
+@@ -1644,7 +1766,56 @@
+ 		exit_cleanup(RERR_SYNTAX);
+ 	}
+ 
++	if (am_sender && !am_server) {
++		/* assertion */
++		warnx("%s: expected to be a server if we already know "
++			"we're a sender", __func__);
++		abort();
++	}
++
++	weakenpromise[0] = '\0';
++
+ 	if (am_server) {
++		if (am_sender) {
++			/*
++			 * Pledge server-sender
++			 */
++			if (numeric_ids) {
++				if (pledge("stdio rpath", NULL) == -1)
++					err(1, "pledge");
++			} else {
++				if (pledge("stdio rpath getpw", NULL) == -1)
++					err(1, "pledge");
++			}
++		} else {
++			/* prepare pledge server-receiver */
++			if (preserve_specials) {
++				/* Needs dpath to create fifos and unix to create sockets. */
++				if (strlcat(weakenpromise, " dpath unix",
++				    sizeof(weakenpromise)) >= sizeof(weakenpromise))
++					errx(1, "not enough room to pledge");
++			} else if (preserve_devices) {
++				if (strlcat(weakenpromise, " dpath",
++				    sizeof(weakenpromise)) >= sizeof(weakenpromise))
++					errx(1, "not enough room to pledge");
++			}
++
++			if (!numeric_ids)
++				if (strlcat(weakenpromise, " getpw",
++				    sizeof(weakenpromise)) >= sizeof(weakenpromise))
++					errx(1, "not enough room to pledge");
++
++			/*
++			 * Pledge server-receiver
++			 */
++			asprintf(&promise, "%s%s", "stdio proc fattr rpath cpath wpath",
++				weakenpromise);
++			if (pledge(promise, NULL) == -1)
++				err(1, "pledge");
++			free(promise);
++			promise = NULL;
++		}
++
+ 		set_nonblocking(STDIN_FILENO);
+ 		set_nonblocking(STDOUT_FILENO);
+ 		if (am_daemon)
