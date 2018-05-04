@@ -28,7 +28,8 @@ $ doas make install
 
 Use hrsync as a drop-in replacement for rsync:
 ```sh
-$ doas cp -p /usr/local/bin/hrsync /usr/local/bin/rsync
+$ make
+$ doas make dropin
 ```
 
 
