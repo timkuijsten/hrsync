@@ -35,8 +35,8 @@ install: hrsync
 	install -m 0555 -g bin rrsync /usr/local/bin
 
 dropin: install
-	ln /usr/local/bin/hrsync /usr/local/bin/rsync
-	ln /usr/local/man/man1/hrsync.1 /usr/local/man/man1/rsync.1
+	ln -f /usr/local/bin/hrsync /usr/local/bin/rsync
+	ln -f /usr/local/man/man1/hrsync.1 /usr/local/man/man1/rsync.1
 
 clean:
 	rm -f hrsync hrsync.1 rrsync
