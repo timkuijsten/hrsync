@@ -26,13 +26,18 @@ build: rsync-3.1.3
 		--with-included-popt \
 		--with-included-zlib && make
 	cp rsync-3.1.3/rsync hrsync
+	cp rsync-3.1.3/rsync.1 hrsync.1
+	cp rsync-3.1.3/support/rrsync .
 
 install: hrsync
 	install -m 0555 -g bin hrsync /usr/local/bin
+	install -m 0644 -g bin hrsync.1 /usr/local/man/man1
+	install -m 0555 -g bin rrsync /usr/local/bin
 
-dropin: hrsync
-	install -m 0555 -g bin hrsync /usr/local/bin/rsync
+dropin: install
+	ln /usr/local/bin/hrsync /usr/local/bin/rsync
+	ln /usr/local/man/man1/hrsync.1 /usr/local/man/man1/rsync.1
 
 clean:
-	rm -f hrsync
+	rm -f hrsync hrsync.1 rrsync
 	rm -rf rsync-3.1.3/
