@@ -1,5 +1,5 @@
 --- rsync.c.orig	Mon Jan 15 19:58:31 2018
-+++ rsync.c	Sun Apr 29 14:01:49 2018
++++ rsync.c	Sat May  5 20:03:04 2018
 @@ -56,6 +56,11 @@
  extern char *iconv_opt;
  #endif
@@ -12,18 +12,7 @@
  #ifdef ICONV_CONST
  iconv_t ic_chck = (iconv_t)-1;
  # ifdef ICONV_OPTION
-@@ -467,6 +472,10 @@
- 	mode_t new_mode = file->mode;
- 	int inherit;
- 
-+	/* Don't try to set attrs on the root dir, fake success. */
-+	if (fname[0] == '.' && fname[1] == '\0')
-+		return 1;
-+
- 	if (!sxp) {
- 		if (dry_run)
- 			return 1;
-@@ -754,4 +763,77 @@
+@@ -754,4 +759,77 @@
  	     : am_generator ? "generator"
  	     : am_receiver ? "receiver"
  	     : "Receiver"; /* pre-forked receiver */
@@ -73,30 +62,30 @@
 +dropsuperuser(void)
 +{
 +	/* Make sure were requested to do something meaningful. */
-+        if (uiddrop == 0) {
-+                errno = EINVAL;
++	if (uiddrop == 0) {
++		errno = EINVAL;
 +		return -1;
-+        }
++	}
 +
-+        /*
-+         * We need to be the superuser in order to clear supplementary group ids
-+         * and all three user and group ids.
-+         */
++	/*
++	 * We need to be the superuser in order to clear supplementary group ids
++	 * and all three user and group ids.
++	 */
 +
-+        if (geteuid() != 0)
++	if (geteuid() != 0)
 +		if (seteuid(0) == -1)
 +			err(1,"seteuid");
 +
-+        /* set supplementary groups to the new group only */
-+        if (setgroups(1, &giddrop) == -1)
++	/* set supplementary groups to the new group only */
++	if (setgroups(1, &giddrop) == -1)
 +		return -1;
 +
-+        /* change real, effective and saved group-id */
-+        if (setresgid(giddrop, giddrop, giddrop) == -1)
++	/* change real, effective and saved group-id */
++	if (setresgid(giddrop, giddrop, giddrop) == -1)
 +		return -1;
 +
-+        /* change real, effective and saved user-id */
-+        if (setresuid(uiddrop, uiddrop, uiddrop) == -1)
++	/* change real, effective and saved user-id */
++	if (setresuid(uiddrop, uiddrop, uiddrop) == -1)
 +		return -1;
 +
 +	return 0;
