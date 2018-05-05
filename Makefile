@@ -15,6 +15,7 @@ rsync-3.1.3: rsync-3.1.3.tar.gz
 	patch rsync-3.1.3/main.c	patch-main_c
 	patch rsync-3.1.3/pipe.c	patch-pipe_c
 	patch rsync-3.1.3/options.c	patch-options_c
+	patch rsync-3.1.3/support/rrsync	patch-rrsync
 
 build: rsync-3.1.3
 	cd rsync-3.1.3 && ./configure \

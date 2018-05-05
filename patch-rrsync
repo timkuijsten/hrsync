@@ -1,0 +1,11 @@
+--- rrsync.orig	Sat May  5 14:19:04 2018
++++ rrsync	Sat May  5 14:20:21 2018
+@@ -11,7 +11,7 @@
+ 
+ # You may configure these values to your liking.  See also the section
+ # of options if you want to disable any options that rsync accepts.
+-use constant RSYNC => '/usr/bin/rsync';
++use constant RSYNC => '/usr/local/bin/hrsync';
+ use constant LOGFILE => 'rrsync.log';
+ 
+ my $Usage = <<EOM;
