@@ -1,5 +1,5 @@
 --- main.c.orig	Mon Jan 15 04:55:07 2018
-+++ main.c	Sat May  5 16:10:54 2018
++++ main.c	Sat May  5 21:35:42 2018
 @@ -128,6 +128,17 @@
  
  static void show_malloc_stats(void);
@@ -94,22 +94,7 @@
  #ifdef ICONV_CONST
  		setup_iconv();
  #endif
-@@ -942,6 +1008,14 @@
- 			msleep(20);
- 	}
- 
-+	/* drop wpath */
-+	asprintf(&promise, "%s%s", "stdio proc fattr rpath cpath",
-+		weakenpromise);
-+	if (pledge(promise, NULL) == -1)
-+		err(1, "pledge");
-+	free(promise);
-+	promise = NULL;
-+
- 	am_generator = 1;
- 	flist_receiving_enabled = True;
- 
-@@ -1331,6 +1405,9 @@
+@@ -1331,6 +1397,9 @@
  			}
  		}
  	} else {  /* read_batch */
@@ -119,7 +104,7 @@
  		local_server = 1;
  		if (check_for_hostspec(argv[argc-1], &shell_machine, &rsync_port)) {
  			rprintf(FERROR, "remote destination is not allowed with --read-batch\n");
-@@ -1384,16 +1461,26 @@
+@@ -1384,16 +1453,26 @@
  		}
  	}
  
@@ -147,7 +132,7 @@
  		rprintf(FERROR, "The --contimeout option may only be "
  				"used when connecting to an rsync daemon.\n");
  		exit_cleanup(RERR_SYNTAX);
-@@ -1420,6 +1507,9 @@
+@@ -1420,6 +1499,9 @@
  	/* if we're running an rsync server on the remote host over a
  	 * remote shell command, we need to do the RSYNCD protocol first */
  	if (daemon_over_rsh) {
@@ -157,7 +142,7 @@
  		int tmpret;
  		tmpret = start_inband_exchange(f_in, f_out, shell_user, remote_argc, remote_argv);
  		if (tmpret < 0)
-@@ -1578,6 +1668,25 @@
+@@ -1578,6 +1660,25 @@
  		exit_cleanup(RERR_SYNTAX);
  	}
  
@@ -183,7 +168,7 @@
  	SIGACTMASK(SIGINT, sig_int);
  	SIGACTMASK(SIGHUP, sig_int);
  	SIGACTMASK(SIGTERM, sig_int);
-@@ -1598,6 +1707,11 @@
+@@ -1598,6 +1699,11 @@
  	 * that implement getcwd that way "pwd" can't be found after chroot. */
  	change_dir(NULL, CD_NORMAL);
  
@@ -195,7 +180,7 @@
  	if ((write_batch || read_batch) && !am_server) {
  		if (write_batch)
  			write_batch_shell_file(orig_argc, orig_argv, argc);
-@@ -1644,7 +1758,56 @@
+@@ -1644,7 +1750,56 @@
  		exit_cleanup(RERR_SYNTAX);
  	}
  
