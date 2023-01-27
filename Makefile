@@ -25,7 +25,7 @@ build: rsync-3.1.3
 		--disable-acl-support \
 		--disable-xattr-support \
 		--with-included-popt \
-		--with-included-zlib && make
+		--without-included-zlib && make
 	cp rsync-3.1.3/rsync hrsync
 	cp rsync-3.1.3/rsync.1 hrsync.1
 	cp rsync-3.1.3/support/rrsync .
